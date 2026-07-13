@@ -125,6 +125,7 @@ from converge_h5_reader.mesh import extract, read_mesh
 
 mesh     = read_mesh("post000061_-7.40757e+01.h5")
 cylinder = extract.to_volume(mesh, region_id=1)      # region 1; None = full domain
+                                                     # crevice excluded by default
 
 # Slices
 plane = extract.tumble_slice(cylinder, y=0.0, keep_largest=True)   # normal to Y
@@ -150,6 +151,33 @@ point, giving a 2D `.vti`.
 Clipping tetrahedralizes first — VTK's clip filters do not handle `VTK_POLYHEDRON` and return an
 empty mesh rather than an error. `extract.tetrahedralize` is exposed if you need it directly.
 Slicing needs no such conversion.
+
+### Crevices
+
+The cylinder region does not stop at the piston: it continues into the **crevice**, the thin
+annular gap between piston and liner, which runs centimetres below the crown (~10 cm on a typical
+case) and is full of cold, stagnant gas that skews any average, slice or plot.
+
+`to_volume` therefore drops it **by default**:
+
+```python
+vol = extract.to_volume(mesh, region_id=1)                        # crevice excluded
+vol = extract.to_volume(mesh, region_id=1, exclude_crevice=False) # keep it
+vol = extract.to_volume(mesh, region_id=1, z_piston=-0.0397)      # override the crown
+```
+
+The crown is read from the `PISTONHEAD` boundary (its lowest point, so a bowl or dome survives
+intact); `extract.piston_crown_z(mesh)` gives it to you directly. Pass `z_piston` explicitly if
+you are working from a plain dataset rather than the full MultiBlock, or if you prefer an analytic
+slider-crank position.
+
+Filtering is on **cell centres** — where CONVERGE stores the values — so cells are kept or dropped
+whole and nothing is cut. A tall crevice cell straddling the crown is kept, so the mesh's geometric
+floor can still dip slightly below `z_piston` even though none of its data does.
+
+When sampling a source whose crevice was *not* already removed, `sample_to_image(..., z_piston=...)`
+raises the floor of the grid so it does not waste most of its rows on the empty column below the
+piston.
 
 ## Tests
 

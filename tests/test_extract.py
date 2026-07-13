@@ -173,6 +173,56 @@ def test_to_volume_selects_a_region(synthetic_h5):
     from converge_h5_reader.mesh import extract, read_mesh
 
     mesh = read_mesh(synthetic_h5, backend="h5", stream=0, fields=["REGION_ID"])
-    # The fixture puts 4 of the 8 cells in region 1.
-    assert extract.to_volume(mesh, region_id=1).n_cells == 4
-    assert extract.to_volume(mesh).n_cells == 8
+    # The fixture puts 4 of the 8 cells in region 1. This is a plain grid with no
+    # PISTONHEAD, so the crevice filter has to be switched off.
+    assert extract.to_volume(mesh, region_id=1, exclude_crevice=False).n_cells == 4
+    assert extract.to_volume(mesh, exclude_crevice=False).n_cells == 8
+
+
+def test_drop_below_z(volume):
+    from converge_h5_reader.mesh import extract
+
+    # Cell centres sit at z = 0.5, 1.5, ... 7.5, so a floor at 4.0 keeps the top four.
+    assert extract.drop_below_z(volume, 4.0).n_cells == 4
+    assert extract.drop_below_z(volume, 0.0).n_cells == 8
+
+    with pytest.raises(RuntimeError, match="no cells lie above"):
+        extract.drop_below_z(volume, 99.0)
+
+
+def test_crevice_filter_uses_z_piston(volume):
+    from converge_h5_reader.mesh import extract
+
+    kept = extract.to_volume(volume, z_piston=4.0)
+    assert kept.n_cells == 4
+    assert extract.to_volume(volume, exclude_crevice=False).n_cells == 8
+
+
+def test_crevice_filter_needs_a_piston_it_can_find(volume):
+    from converge_h5_reader.mesh import extract
+
+    # A plain grid with no PISTONHEAD boundary and no explicit z_piston.
+    with pytest.raises(ValueError, match="z_piston is needed"):
+        extract.to_volume(volume)
+
+
+def test_piston_crown_z_reports_a_missing_boundary(volume):
+    import pyvista as pv
+
+    from converge_h5_reader.mesh import extract
+
+    with pytest.raises(KeyError, match="PISTONHEAD"):
+        extract.piston_crown_z(pv.MultiBlock({"Mesh": volume}))
+
+
+def test_sample_to_image_raises_the_grid_floor(volume):
+    from converge_h5_reader.mesh import extract
+
+    full = extract.sample_to_image(volume, spacing=0.5)
+    floored = extract.sample_to_image(volume, spacing=0.5, z_piston=4.0)
+
+    assert floored.origin[2] == pytest.approx(4.0)
+    assert floored.dimensions[2] < full.dimensions[2]
+
+    with pytest.raises(ValueError, match="above the source's top"):
+        extract.sample_to_image(volume, spacing=0.5, z_piston=99.0)

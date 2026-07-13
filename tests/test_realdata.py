@@ -109,6 +109,31 @@ def test_vtk_backend_reads_this_file_not_its_neighbour(real_h5):
 
 
 @pytest.mark.mesh
+def test_crevice_is_excluded_by_default(real_h5):
+    """The cylinder region includes a long, thin crevice below the piston crown."""
+    pytest.importorskip("pyvista")
+    from converge_h5_reader.mesh import extract, read_mesh
+
+    mesh = read_mesh(real_h5)
+    crown = extract.piston_crown_z(mesh)
+
+    with_crevice = extract.to_volume(mesh, region_id=1, exclude_crevice=False)
+    without = extract.to_volume(mesh, region_id=1)
+
+    # The crevice runs centimetres below the crown.
+    assert with_crevice.bounds[4] < crown - 0.05
+    assert 0 < without.n_cells < with_crevice.n_cells
+
+    # The contract is on the data, i.e. the cell centres: none may sit below the crown.
+    centers = np.asarray(without.cell_centers().points)[:, 2]
+    assert centers.min() >= crown
+
+    # A few tall crevice cells straddle the crown, so the *geometry* still dips a
+    # little below it -- but far less than the unfiltered mesh did.
+    assert without.bounds[4] > with_crevice.bounds[4] + 0.05
+
+
+@pytest.mark.mesh
 def test_tumble_slice_to_vti(real_h5, tmp_path):
     """The full CLAUDE.md pipeline: read -> region -> tumble slice -> sample -> .vti."""
     pytest.importorskip("pyvista")
@@ -117,7 +142,7 @@ def test_tumble_slice_to_vti(real_h5, tmp_path):
     from converge_h5_reader.mesh import extract, read_mesh
 
     mesh = read_mesh(real_h5)
-    cylinder = extract.to_volume(mesh, region_id=1)
+    cylinder = extract.to_volume(mesh, region_id=1)   # crevice excluded by default
     assert cylinder.n_cells > 0
 
     plane = extract.tumble_slice(cylinder, y=0.0, keep_largest=True)
