@@ -15,3 +15,5 @@ dist/
 .coverage
 htmlcov/
 .venv/
+
+CLAUDE.md
