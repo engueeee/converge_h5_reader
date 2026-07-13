@@ -1,0 +1,17 @@
+# Local datasets and pointers to them (never commit the multi-GB H5 files)
+datas/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/

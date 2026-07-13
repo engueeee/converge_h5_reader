@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "converge-h5-reader"
+version = "0.1.0"
+description = "Modular, lazy reader for CONVERGE CFD HDF5 post* files"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [{ name = "Enguerran Rolland", email = "enguerran.rolland@live.fr" }]
+keywords = ["CONVERGE", "CFD", "HDF5", "post-processing"]
+classifiers = [
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "h5py>=3.8",
+  "numpy>=1.20",
+  "pandas>=1.3",
+  "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+mesh = ["pyvista>=0.44", "vtk>=9.3"]
+progress = ["tqdm>=4.65"]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "pandas-stubs",
+  "converge-h5-reader[mesh,progress]",
+]
+
+[project.entry-points."converge_h5_reader.mesh_backends"]
+vtk = "converge_h5_reader.mesh.vtk_reader:VTKConvergeBackend"
+h5 = "converge_h5_reader.mesh.polyhedral:PolyhedralBackend"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/converge_h5_reader"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config -m 'not realdata'"
+markers = [
+  "realdata: needs a real CONVERGE file (set CONVERGE_H5_TEST_FILE)",
+  "mesh: needs the [mesh] extra (vtk/pyvista)",
+]
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:vtkmodules.*",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RET", "PTH", "NPY", "RUF", "D"]
+ignore = ["D203", "D213", "D105"]  # D105: dunders are self-explanatory here
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.mypy]
+python_version = "3.9"
+files = ["src/converge_h5_reader"]
+strict = true
+warn_unreachable = true
+# numpy and h5py return bare/Any-typed arrays at every boundary; requiring
+# ndarray type parameters and no-Any returns here buys nothing.
+disallow_any_generics = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["h5py.*", "vtk.*", "vtkmodules.*", "pyvista.*", "tqdm.*"]
+ignore_missing_imports = true
