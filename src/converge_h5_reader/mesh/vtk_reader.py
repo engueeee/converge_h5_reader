@@ -111,9 +111,17 @@ def read_converge_h5(
 
 
 def _choose_time(times: np.ndarray, cad_run: float | None, path: Path) -> float:
-    """Pick the internal timestep to load."""
+    """Pick the timestep to load, defaulting to the one this file actually holds."""
     lo, hi = float(times[0]), float(times[-1])
+
     if cad_run is None:
+        # vtkCONVERGECFDReader globs the *directory* as a time series, so the steps
+        # it offers include the neighbouring post*.h5 files. Reading "the last step"
+        # would silently return another file's data; the CAD in this file's name is
+        # the one the caller asked for.
+        match = H5_PATTERN.search(path.name)
+        if match is not None:
+            return float(times[int(np.argmin(np.abs(times - float(match.group(1)))))])
         return float(times[-1])
 
     requested = float(cad_run)

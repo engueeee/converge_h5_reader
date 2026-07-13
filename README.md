@@ -113,6 +113,44 @@ Two backends:
 Without the extra installed, any of this raises `MissingBackendError` telling you to
 `pip install 'converge-h5-reader[mesh]'`.
 
+> **`cad_run` and the directory time series.** `vtkCONVERGECFDReader` globs the *whole directory*
+> as a time series, so the timesteps it offers include the neighbouring `post*.h5` files. Reading
+> "the last step" would silently hand you another file's mesh. `read_mesh` therefore defaults to
+> the CAD in the file's own name; pass `cad_run` (the index column) to override.
+
+## Slicing, clipping and `.vti` export
+
+```python
+from converge_h5_reader.mesh import extract, read_mesh
+
+mesh     = read_mesh("post000061_-7.40757e+01.h5")
+cylinder = extract.to_volume(mesh, region_id=1)      # region 1; None = full domain
+
+# Slices
+plane = extract.tumble_slice(cylinder, y=0.0, keep_largest=True)   # normal to Y
+plane = extract.axis_slice(cylinder, axis="z", position=-0.01)
+plane = extract.injector_slice(cylinder, origin=(0.0, 0.0, 0.005), axis=(0, 0, 1))
+
+# Volumes: by box, sphere, cylinder, or any closed surface you can load
+core = extract.clip_cylinder(cylinder, center=(0, 0, -0.02), direction=(0, 0, 1),
+                             radius=0.03, height=0.04)
+core = extract.clip_box(cylinder, (-0.04, 0.04, -0.04, 0.04, -0.05, 0.0))
+core = extract.clip_surface(cylinder, pv.read("piston_bowl.stl"))
+
+# Resample onto a uniform grid and write it out
+image = extract.sample_to_image(plane, spacing=50e-6, fields=["TEMPERATURE", "VELOCITY"])
+extract.save_vti(image, "tumble.vti")
+```
+
+`sample_to_image` is what makes a `.vti` possible at all: CONVERGE cells are polyhedral cut cells,
+so an `ImageData` is built over the bounds and interpolated from the mesh. Points falling outside
+the mesh are flagged in `vtkValidPointMask`. An axis with zero extent (a slice) collapses to one
+point, giving a 2D `.vti`.
+
+Clipping tetrahedralizes first — VTK's clip filters do not handle `VTK_POLYHEDRON` and return an
+empty mesh rather than an error. `extract.tetrahedralize` is exposed if you need it directly.
+Slicing needs no such conversion.
+
 ## Tests
 
 ```bash

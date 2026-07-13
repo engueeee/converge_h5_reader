@@ -29,7 +29,14 @@ from typing import Any
 from ..exceptions import MissingBackendError
 from .base import MeshBackend
 
-__all__ = ["MeshBackend", "available_backends", "get_backend", "read_mesh", "register_backend"]
+__all__ = [
+    "MeshBackend",
+    "available_backends",
+    "extract",
+    "get_backend",
+    "read_mesh",
+    "register_backend",
+]
 
 ENTRY_POINT_GROUP = "converge_h5_reader.mesh_backends"
 
@@ -112,3 +119,17 @@ def available_backends() -> tuple[str, ...]:
 def read_mesh(path: str | Path, *, backend: str = "vtk", **kwargs: Any) -> Any:
     """Read a ``post*.h5`` into a PyVista mesh using the named backend."""
     return get_backend(backend).read(Path(path), **kwargs)
+
+
+def __getattr__(name: str) -> Any:
+    """Import the pyvista-dependent ``extract`` module on demand."""
+    if name == "extract":
+        try:
+            return importlib.import_module(".extract", __name__)
+        except ImportError as exc:
+            raise MissingBackendError(
+                "the slicing/clipping/.vti helpers need vtk/pyvista:\n"
+                "  pip install 'converge-h5-reader[mesh]'\n"
+                f"original import error: {exc}"
+            ) from exc
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

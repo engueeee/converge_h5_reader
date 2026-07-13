@@ -82,6 +82,55 @@ def test_matches_the_legacy_reader(real_h5):
 
 
 @pytest.mark.mesh
+def test_vtk_backend_reads_this_file_not_its_neighbour(real_h5):
+    """vtkCONVERGECFDReader globs the directory as a time series.
+
+    Defaulting to "the last timestep" would return a *neighbouring* post*.h5's data,
+    silently and with a different cell count. The default must be this file's own CAD.
+    """
+    pytest.importorskip("pyvista")
+    from converge_h5_reader.mesh import read_mesh
+    from converge_h5_reader.mesh.vtk_reader import read_timesteps
+
+    with ConvergeFile(real_h5) as f:
+        expected_cells = f[0].n_cells
+        expected_cad = f.crank_angle
+
+    steps = read_timesteps(real_h5)
+    if len(steps) > 1:
+        assert not np.isclose(steps[-1], expected_cad), (
+            "this file is the last step in its directory, so the test cannot catch the bug"
+        )
+
+    mesh = read_mesh(real_h5)
+    volume = mesh["Mesh"]
+    assert volume.n_cells == expected_cells
+    assert "REGION_ID" in volume.cell_data
+
+
+@pytest.mark.mesh
+def test_tumble_slice_to_vti(real_h5, tmp_path):
+    """The full CLAUDE.md pipeline: read -> region -> tumble slice -> sample -> .vti."""
+    pytest.importorskip("pyvista")
+    import pyvista as pv
+
+    from converge_h5_reader.mesh import extract, read_mesh
+
+    mesh = read_mesh(real_h5)
+    cylinder = extract.to_volume(mesh, region_id=1)
+    assert cylinder.n_cells > 0
+
+    plane = extract.tumble_slice(cylinder, y=0.0, keep_largest=True)
+    assert plane.n_cells > 0
+
+    image = extract.sample_to_image(plane, spacing=200e-6, fields=["TEMPERATURE", "VELOCITY"])
+    assert image.point_data["vtkValidPointMask"].any()
+
+    path = extract.save_vti(image, tmp_path / "tumble.vti")
+    assert pv.read(path).dimensions == image.dimensions
+
+
+@pytest.mark.mesh
 def test_vtk_backend_blocks_match_the_boundary_table(real_h5):
     pytest.importorskip("pyvista")
     from converge_h5_reader.mesh import read_mesh
