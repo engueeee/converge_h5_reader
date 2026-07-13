@@ -38,7 +38,7 @@ class RunConfig:
     start_cycle: int = 1
     n_cycles: int = 1
     cad_per_cycle: float = 720.0
-    cad_cycle_start: float = 0.0
+    cad_cycle_start: float = -360.0
     cad_run_offset: float = 0.0
     _roots: tuple[Path, ...] = field(init=False, repr=False, compare=False)
 
@@ -160,7 +160,7 @@ def select_at_cad(
     index: pd.DataFrame,
     target_cad: float,
     *,
-    tol: float = 1e-2,
+    tol: float = 5e-2,
     cycles: Sequence[int] | None = None,
     runs: Sequence[str] | None = None,
     nearest: bool = False,
@@ -183,5 +183,6 @@ def select_at_cad(
         return frame[delta <= tol].copy()
 
     frame = frame.assign(_delta=delta)
-    picked = frame.loc[frame.groupby(["run", "cycle"])["_delta"].idxmin()]
-    return picked.drop(columns="_delta").reset_index(drop=True)
+    df = frame.loc[frame.groupby(["run", "cycle"])["_delta"].idxmin() ]
+    df = df[df["_delta"] < tol]
+    return df.drop(columns="_delta").reset_index(drop=True)
